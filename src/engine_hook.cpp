@@ -4,35 +4,39 @@
 
 #include <ctime>
 
-#include "enginedef.h"
+#include "engine_hook.h"
 #include "slowdl.h"
 
-PRIVATE_FUNCTION_DEFINE(SV_BeginFileDownload_f);
-PRIVATE_FUNCTION_DEFINE(SV_DropClient);
+namespace
+{
 
-client_t**    host_client = NULL;
-cmd_source_t* cmd_source  = NULL;
-edict_t**     sv_player   = NULL;
+goldsrcext::IGoldSrcDownloadExt* g_pDownloadExt        = nullptr;
+goldsrcext::HookHandle           g_BeginDownloadHandle = goldsrcext::kInvalidHookHandle;
 
-// Applies the decision of CSlowDLMonitor to the engine.
-class CEngineSlowDLSink : public ISlowDLSink
+// Applies the decision of CSlowDLMonitor to the active download extension.
+class CEngineSlowDLSink final : public ISlowDLSink
 {
 public:
-    explicit CEngineSlowDLSink(client_t* client) :
+    CEngineSlowDLSink(goldsrcext::IGoldSrcDownloadExt* downloadExt,
+                      goldsrcext::IHookChain<void>*    chain,
+                      goldsrcext::GoldSrcOpaqueClient* client) :
+        m_pDownloadExt(downloadExt),
+        m_pChain(chain),
         m_pClient(client)
     {
     }
 
     void ForwardRequest() override
     {
-        g_call_original_SV_BeginFileDownload_f();
+        m_pChain->CallNext();
     }
 
     void DropClient() override
     {
-        static char format[] = "%s";
-
-        g_pfn_SV_DropClient(m_pClient, FALSE, format, "UDP downloads are disabled on this server. Please enable FastDL and reconnect.");
+        m_pDownloadExt->DropClient(
+            m_pClient,
+            false,
+            "UDP downloads are disabled on this server. Please enable FastDL and reconnect.");
     }
 
     void PrintConsole(const std::string& line) override
@@ -51,10 +55,12 @@ public:
     }
 
 private:
-    client_t* m_pClient;
+    goldsrcext::IGoldSrcDownloadExt* m_pDownloadExt;
+    goldsrcext::IHookChain<void>*    m_pChain;
+    goldsrcext::GoldSrcOpaqueClient* m_pClient;
 };
 
-static void CopyPlayerIdentity(edict_t* pPlayer, slowdl_request_t& request)
+void CopyPlayerIdentity(edict_t* pPlayer, slowdl_request_t& request)
 {
     request.player = STRING(pPlayer->v.netname);
 
@@ -77,15 +83,17 @@ static void CopyPlayerIdentity(edict_t* pPlayer, slowdl_request_t& request)
         request.authid = authid;
 }
 
-void NewSV_BeginFileDownload_f()
+void OnBeginFileDownload(goldsrcext::IHookChain<void>* chain, void* userData) noexcept
 {
+    auto* downloadExt = static_cast<goldsrcext::IGoldSrcDownloadExt*>(userData);
+
     slowdl_request_t request;
 
-    request.client_source = (*cmd_source == src_client);
+    request.client_source = (downloadExt->GetCommandSource() == goldsrcext::CommandSource::kClient);
 
-    client_t* client = request.client_source ? *host_client : NULL;
+    goldsrcext::GoldSrcOpaqueClient* client = request.client_source ? downloadExt->GetHostClient() : nullptr;
 
-    request.has_client = (client != NULL);
+    request.has_client = (client != nullptr);
 
     // dlfile <filename>
     if (request.client_source && request.has_client && g_engfuncs.pfnCmd_Argc() == 2)
@@ -98,7 +106,7 @@ void NewSV_BeginFileDownload_f()
         request.mapname  = STRING(gpGlobals->mapname);
         request.svencoop = g_bIsSvenCoop;
 
-        edict_t* pPlayer = *sv_player;
+        edict_t* pPlayer = downloadExt->GetServerPlayerEdict();
 
         if (pPlayer && !pPlayer->free)
         {
@@ -106,34 +114,39 @@ void NewSV_BeginFileDownload_f()
         }
     }
 
-    CEngineSlowDLSink sink(client);
+    CEngineSlowDLSink sink(downloadExt, chain, client);
 
     g_SlowDLMonitor.HandleRequest(request, SlowDL_GetSettings(), sink);
 }
 
-hook_t* g_phook_SV_BeginFileDownload_f = NULL;
+} // namespace
 
-bool InstallEngineHooks(bool bTransaction)
+bool InstallEngineHooks(goldsrcext::IGoldSrcDownloadExt* downloadExt)
 {
-    g_phook_SV_BeginFileDownload_f = gpMetaUtilFuncs->pfnInlineHook((void*)g_pfn_SV_BeginFileDownload_f, (void*)NewSV_BeginFileDownload_f, (void**)&g_call_original_SV_BeginFileDownload_f, bTransaction);
-
-    if (!g_phook_SV_BeginFileDownload_f || !g_call_original_SV_BeginFileDownload_f)
-    {
-        if (g_phook_SV_BeginFileDownload_f)
-            gpMetaUtilFuncs->pfnUnHook(g_phook_SV_BeginFileDownload_f);
-
-        g_phook_SV_BeginFileDownload_f = NULL;
+    if (!downloadExt)
         return false;
-    }
 
+    const goldsrcext::HookHandle handle = downloadExt->RegisterBeginFileDownloadHook(
+        &OnBeginFileDownload,
+        downloadExt,
+        goldsrcext::kAltitudeNormal);
+
+    if (handle == goldsrcext::kInvalidHookHandle)
+        return false;
+
+    g_pDownloadExt        = downloadExt;
+    g_BeginDownloadHandle = handle;
     return true;
 }
 
 bool UninstallEngineHooks()
 {
-    if (g_phook_SV_BeginFileDownload_f && !gpMetaUtilFuncs->pfnUnHook(g_phook_SV_BeginFileDownload_f))
-        return false;
+    bool ok = true;
 
-    g_phook_SV_BeginFileDownload_f = NULL;
-    return true;
+    if (g_pDownloadExt && g_BeginDownloadHandle != goldsrcext::kInvalidHookHandle)
+        ok = g_pDownloadExt->UnregisterBeginFileDownloadHook(g_BeginDownloadHandle);
+
+    g_pDownloadExt        = nullptr;
+    g_BeginDownloadHandle = goldsrcext::kInvalidHookHandle;
+    return ok;
 }

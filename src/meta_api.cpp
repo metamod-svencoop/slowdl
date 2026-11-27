@@ -2,7 +2,9 @@
 
 #include <meta_api.h> // of course
 
-#include "enginedef.h"
+#include "bridge/slowdl_bridge.h"
+#include "bridge/slowdl_bridge_metamod.h"
+#include "engine_hook.h"
 #include "slowdl.h"
 
 #define REQUIRED_INTERFACE_MAJOR_VERSION 5
@@ -40,6 +42,9 @@ meta_globals_t*  gpMetaGlobals;   // metamod globals
 gamedll_funcs_t* gpGamedllFuncs;  // gameDLL function tables
 mutil_funcs_t*   gpMetaUtilFuncs; // metamod utility functions
 
+static MetamodSlowDLHostContext g_SlowDLHostContext;
+static CSlowDLDownloadBridge    g_SlowDLBridge;
+
 // Accept "<major>:<minor>" with the required major version and at least the
 // required minor version. Trailing characters are rejected.
 static bool IsCompatibleInterfaceVersion(const char* interfaceVersion)
@@ -56,25 +61,6 @@ static bool IsCompatibleInterfaceVersion(const char* interfaceVersion)
 
     return iMajorVersion == REQUIRED_INTERFACE_MAJOR_VERSION && iMinorVersion >= REQUIRED_INTERFACE_MINOR_VERSION;
 }
-
-// Resolve symbolName through metamod's gamedata catalog, retrying
-// alternativeSymbolName when the catalog has no entry for symbolName.
-static bool ResolveEngineSymbol(void* engineBase, const char* symbolName, meta_gamesymbol_kind_t kind, void** pAddress, const char* alternativeSymbolName = NULL)
-{
-    auto status = gpMetaUtilFuncs->pfnResolveGameSymbol(engineBase, symbolName, kind, pAddress);
-
-    if (status == META_GAMESYMBOL_SYMBOL_NOT_FOUND && alternativeSymbolName)
-        status = gpMetaUtilFuncs->pfnResolveGameSymbol(engineBase, alternativeSymbolName, kind, pAddress);
-
-    if (status == META_GAMESYMBOL_OK)
-        return true;
-
-    LOG_ERROR(PLID, "Cannot resolve %s: %s", symbolName, gpMetaUtilFuncs->pfnGetGameSymbolStatusString(status));
-    return false;
-}
-
-#define RESOLVE_ENGINE_FUNCTION(name) ResolveEngineSymbol(engineBase, name##_GameSymbol, META_GAMESYMBOL_KIND_FUNCTION, (void**)&g_pfn_##name, name##_GameSymbolAlternative)
-#define RESOLVE_ENGINE_VARIABLE(name) ResolveEngineSymbol(engineBase, name##_GameSymbol, META_GAMESYMBOL_KIND_GLOBAL, (void**)&name)
 
 // Metamod requesting info about this plugin:
 //  ifvers			(given) interface_version metamod is using
@@ -106,38 +92,30 @@ C_DLLEXPORT int Meta_Attach(PLUG_LOADTIME    now,
     gpMetaGlobals  = pMGlobals;
     gpGamedllFuncs = pGamedllFuncs;
 
-    auto engineBase = gpMetaUtilFuncs->pfnGetEngineBase();
+    g_SlowDLHostContext.metaUtilFuncs = gpMetaUtilFuncs;
+    g_SlowDLHostContext.plid          = PLID;
 
-    if (!engineBase)
+    // Only startup has a later Metamod transaction commit for legacy inline hooks.
+    if (!g_SlowDLBridge.Initialize(MakeMetamodSlowDLHostOps(&g_SlowDLHostContext), now == PT_STARTUP))
+    {
+        LOG_ERROR(PLID, "Download interception backend is unavailable; refusing to load SlowDL");
         return FALSE;
-
-    if (!RESOLVE_ENGINE_FUNCTION(SV_BeginFileDownload_f))
-        return FALSE;
-
-    if (!RESOLVE_ENGINE_FUNCTION(SV_DropClient))
-        return FALSE;
-
-    if (!RESOLVE_ENGINE_VARIABLE(host_client))
-        return FALSE;
-
-    if (!RESOLVE_ENGINE_VARIABLE(cmd_source))
-        return FALSE;
-
-    if (!RESOLVE_ENGINE_VARIABLE(sv_player))
-        return FALSE;
+    }
 
     char gameDirectory[1024] = {};
     g_engfuncs.pfnGetGameDir(gameDirectory);
 
     SlowDL_Init(gameDirectory);
 
-    // Only startup has a later Metamod transaction commit.
-    if (!InstallEngineHooks(now == PT_STARTUP))
+    if (!InstallEngineHooks(g_SlowDLBridge.GetInterface()))
     {
+        g_SlowDLBridge.Shutdown();
         SlowDL_Shutdown();
         LOG_ERROR(PLID, "Unable to install the UDP download hook");
         return FALSE;
     }
+
+    LOG_MESSAGE(PLID, "Download interception backend active: %s", g_SlowDLBridge.GetBackendName());
 
     SlowDL_RegisterCvars();
 
@@ -151,9 +129,9 @@ C_DLLEXPORT int Meta_Attach(PLUG_LOADTIME    now,
 C_DLLEXPORT int Meta_Detach(PLUG_LOADTIME /* now */,
                             PL_UNLOAD_REASON /* reason */)
 {
-    if (!UninstallEngineHooks())
-        return FALSE;
+    const bool hooksRemoved   = UninstallEngineHooks();
+    const bool bridgeShutdown = g_SlowDLBridge.Shutdown();
 
     SlowDL_Shutdown();
-    return TRUE;
+    return (hooksRemoved && bridgeShutdown) ? TRUE : FALSE;
 }

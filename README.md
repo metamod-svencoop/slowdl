@@ -53,7 +53,7 @@ ctest --test-dir build/x86/Release -C Release --output-on-failure
 cmake --install build/x86/Release --config Release
 ```
 
-On Linux omit `-A Win32` and add `-DCMAKE_BUILD_TYPE=Release`. Configure Debug in a separate `build/x86/Debug` tree. `METAMOD_SOURCE_PATH` and `FORMAT_VALIDATION_SOURCE_PATH` accept local dependency trees; otherwise pinned revisions are fetched. Default installation is `install/x86/<Config>/addons/`.
+On Linux omit `-A Win32` and add `-DCMAKE_BUILD_TYPE=Release`. Configure Debug in a separate `build/x86/Debug` tree. `METAMOD_SOURCE_PATH`, `GOLDSRCEXT_SOURCE_PATH` and `FORMAT_VALIDATION_SOURCE_PATH` accept local dependency trees; otherwise pinned revisions are fetched. Default installation is `install/x86/<Config>/addons/`.
 
 Tests exercise ordinary and exempt downloads, all cvar combinations, invalid contexts, log escaping, forwarding/disconnect order, and file write failure recovery. They do not substitute for connection and FastDL integration tests on each engine build.
 
