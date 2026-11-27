@@ -6,7 +6,7 @@
 #include "slowdl.h"
 
 #define REQUIRED_INTERFACE_MAJOR_VERSION 5
-#define REQUIRED_INTERFACE_MINOR_VERSION 17
+#define REQUIRED_INTERFACE_MINOR_VERSION 18
 
 // Must provide at least one of these..
 static META_FUNCTIONS gMetaFunctionTable = {
@@ -84,7 +84,7 @@ C_DLLEXPORT int Meta_Query(const char* interfaceVersion, plugin_info_t** pPlugIn
 {
     if (!IsCompatibleInterfaceVersion(interfaceVersion))
     {
-        pMetaUtilFuncs->pfnLogError(PLID, "Metamod interface 5:17 or newer compatible 5.x is required");
+        pMetaUtilFuncs->pfnLogError(PLID, "Metamod interface 5:18 or newer compatible 5.x is required");
         return FALSE;
     }
 

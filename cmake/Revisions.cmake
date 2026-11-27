@@ -1,2 +1,2 @@
-# Metamod with BLOB module file sources and Decay index compatibility (interface 5:17).
-set(MMFG_METAMOD_REVISION 1a620468c310030ce792b6455763bdcd57553a75)
+# Metamod interface 5:18 (streamlined mutil_funcs_t and dead code cleanup).
+set(MMFG_METAMOD_REVISION 2386657cb201f0d282cf8ace84931f41abbf46a0)

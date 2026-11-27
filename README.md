@@ -28,7 +28,7 @@ win32 addons/metamod/dlls/slowdl.dll
 linux addons/metamod/dlls/slowdl.so
 ```
 
-Use this project's Metamod interface 5:17 or newer compatible 5.x. Old BLOB engines additionally require the Metamod revision pinned in `cmake/Revisions.cmake` or a later revision containing BLOB source registration. Metamod loads gamedata at startup, so restart after installing new data. Runtime loading is supported when the required catalog was loaded at startup. Runtime unloading is disabled.
+Use this project's Metamod interface 5:18 or newer compatible 5.x. Old BLOB engines additionally require the Metamod revision pinned in `cmake/Revisions.cmake` or a later revision containing BLOB source registration. Metamod loads gamedata at startup, so restart after installing new data. Runtime loading is supported when the required catalog was loaded at startup. Runtime unloading is disabled.
 
 ## Supported inputs
 
