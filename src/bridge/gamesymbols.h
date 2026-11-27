@@ -1,7 +1,5 @@
 #pragma once
 
-#include <signatures_template.h>
-
 // XXXX_GameSymbol is the symbolName of XXXX in the GoldSrc_VibeSignatures
 // gamedata (scripts/manifests/slowdl.json and slowdl_windows.json).
 // XXXX_GameSymbolAlternative is tried when the catalog has no XXXX_GameSymbol
