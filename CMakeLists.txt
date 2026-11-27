@@ -29,8 +29,13 @@ if(MSVC)
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_compile_definitions(slowdl_hook_bridge PRIVATE PLATFORM_POSIX LINUX _LINUX
         $<$<CONFIG:Debug>:_DEBUG> $<$<NOT:$<CONFIG:Debug>>:NDEBUG>)
-    target_compile_options(slowdl_hook_bridge PRIVATE -m32 -fno-exceptions -fno-rtti -fvisibility=hidden
-        -march=i686 -mtune=generic -msse -msse2 -g $<$<NOT:$<CONFIG:Debug>>:-O2>)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        target_compile_options(slowdl_hook_bridge PRIVATE -m64 -fno-exceptions -fno-rtti -fvisibility=hidden
+            -g $<$<NOT:$<CONFIG:Debug>>:-O2>)
+    else()
+        target_compile_options(slowdl_hook_bridge PRIVATE -m32 -fno-exceptions -fno-rtti -fvisibility=hidden
+            -march=i686 -mtune=generic -msse -msse2 -g $<$<NOT:$<CONFIG:Debug>>:-O2>)
+    endif()
 endif()
 
 add_library(slowdl SHARED
@@ -45,9 +50,13 @@ add_library(slowdl SHARED
 mmfg_configure_target(slowdl)
 target_link_libraries(slowdl PRIVATE slowdl_hook_bridge Metamod::SDK)
 if(WIN32)
-    target_link_options(slowdl PRIVATE "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/slowdl.def")
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_link_options(slowdl PRIVATE "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/slowdl.def")
+    endif()
 else()
-    target_compile_options(slowdl PRIVATE -mincoming-stack-boundary=2)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_compile_options(slowdl PRIVATE -mincoming-stack-boundary=2)
+    endif()
 endif()
 mmfg_add_gamedata(slowdl scripts/manifests/slowdl.json)
 # Keep Windows-only releases separate: the existing validator intentionally

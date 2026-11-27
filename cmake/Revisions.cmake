@@ -1,5 +1,5 @@
-# Metamod interface 5:18 (streamlined mutil_funcs_t, uintptr_t, dead code cleanup).
-set(MMFG_METAMOD_REVISION 2ff5489bf9ede2d6590c9ad9e8e4c64c4c72d0d6)
+# Metamod interface 5:18 with x86/x64 support and IGameDllProxyHost.
+set(MMFG_METAMOD_REVISION a32e3c7bd3fbb5d83b75d2e68523c27303479559)
 
-# GoldSrcExt public HookChain and download extension contracts.
-set(MMFG_GOLDSRCEXT_REVISION e33b145410d4b91a637912420f1aaaa121db9ae0)
+# GoldSrcExt public HookChain, download extension, and game-DLL proxy host contracts.
+set(MMFG_GOLDSRCEXT_REVISION d17dbac1e649492a3c778cebb37b05b08492d5f7)
