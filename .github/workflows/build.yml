@@ -10,25 +10,31 @@ permissions:
 jobs:
   native:
     strategy:
+      fail-fast: false
       matrix:
         os: [windows-2022, ubuntu-24.04]
+        arch: [x86, x64]
         config: [Debug, Release]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - if: runner.os == 'Linux'
+      - if: runner.os == 'Linux' && matrix.arch == 'x86'
         run: sudo apt-get update && sudo apt-get install -y gcc-multilib g++-multilib
-      - if: runner.os == 'Windows'
+      - if: runner.os == 'Windows' && matrix.arch == 'x86'
         run: cmake -S . -B build/x86/${{ matrix.config }} -A Win32
-      - if: runner.os == 'Linux'
+      - if: runner.os == 'Windows' && matrix.arch == 'x64'
+        run: cmake -S . -B build/x64/${{ matrix.config }} -A x64
+      - if: runner.os == 'Linux' && matrix.arch == 'x86'
         run: cmake -S . -B build/x86/${{ matrix.config }} -DCMAKE_BUILD_TYPE=${{ matrix.config }}
-      - run: cmake --build build/x86/${{ matrix.config }} --config ${{ matrix.config }} --parallel 4
-      - run: ctest --test-dir build/x86/${{ matrix.config }} -C ${{ matrix.config }} --output-on-failure
-      - run: cmake --install build/x86/${{ matrix.config }} --config ${{ matrix.config }}
+      - if: runner.os == 'Linux' && matrix.arch == 'x64'
+        run: cmake -S . -B build/x64/${{ matrix.config }} -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DMETAMOD_64BIT=ON
+      - run: cmake --build build/${{ matrix.arch }}/${{ matrix.config }} --config ${{ matrix.config }} --parallel 4
+      - run: ctest --test-dir build/${{ matrix.arch }}/${{ matrix.config }} -C ${{ matrix.config }} --output-on-failure
+      - run: cmake --install build/${{ matrix.arch }}/${{ matrix.config }} --config ${{ matrix.config }}
       - uses: actions/upload-artifact@v4
         with:
-          name: slowdl-${{ runner.os }}-x86-${{ matrix.config }}
-          path: install/x86/${{ matrix.config }}/addons/
+          name: slowdl-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.config }}
+          path: install/${{ matrix.arch }}/${{ matrix.config }}/addons/
           if-no-files-found: error
